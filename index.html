@@ -1,1 +1,404 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Scalper</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#080d16;color:#fff;
+ font-family:Arial,sans-serif;padding:15px;
+}
+.container{max-width:600px;margin:auto}
+header{text-align:center;padding:18px 0}
+header h1{color:#00e5a0;margin:0;font-size:28px}
+header p{color:#8995a8;font-size:12px}
+.card{
+ background:#121c2b;border:1px solid #25354b;
+ border-radius:14px;padding:17px;margin:13px 0;
+}
+h3{margin:0 0 14px;color:#00e5a0}
+.status{font-size:13px;color:#ffbf47}
+select,button{
+ width:100%;padding:14px;margin:7px 0;
+ border-radius:9px;border:1px solid #34465c;
+ background:#0b1421;color:white;font-size:15px;
+}
+button{
+ background:#00c98b;color:#001b13;
+ border:none;font-weight:bold;cursor:pointer;
+}
+button.stop{background:#e34b59;color:white}
+.stats{
+ display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.stat{
+ background:#0b1421;padding:14px;border-radius:10px;
+ text-align:center;
+}
+.stat small{color:#8797aa}
+.stat strong{display:block;font-size:23px;margin-top:7px}
+.signal{text-align:center;padding:20px}
+.signal strong{font-size:25px;color:#00e5a0}
+.signal p{color:#a5b3c5}
+.history{
+ display:flex;flex-wrap:wrap;gap:7px;
+}
+.digit{
+ width:34px;height:34px;border-radius:7px;
+ display:flex;align-items:center;justify-content:center;
+ font-weight:bold;background:#26364c;
+}
+.even{background:#087d68}
+.odd{background:#a04d28}
+footer{text-align:center;color:#718096;font-size:11px;padding:20px}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+<h1>⚡ MARKET SCALPER</h1>
+<p>DERIV LIVE MARKET ANALYSIS SCANNER</p>
+<div id="status" class="status">● DISCONNECTED</div>
+</header>
+
+<div class="card">
+<h3>Market Settings</h3>
+
+<label>Select Market</label>
+<select id="market">
+<option value="R_10">Volatility 10 Index</option>
+<option value="R_25">Volatility 25 Index</option>
+<option value="R_50">Volatility 50 Index</option>
+<option value="R_75">Volatility 75 Index</option>
+<option value="R_100">Volatility 100 Index</option>
+<option value="1HZ10V">Volatility 10 (1s) Index</option>
+<option value="1HZ25V">Volatility 25 (1s) Index</option>
+<option value="1HZ50V">Volatility 50 (1s) Index</option>
+<option value="1HZ75V">Volatility 75 (1s) Index</option>
+<option value="1HZ100V">Volatility 100 (1s) Index</option>
+</select>
+
+<label>Analysis Mode</label>
+<select id="mode">
+<option value="even">EVEN / ODD</option>
+<option value="over">OVER / UNDER</option>
+</select>
+
+<label>Over / Under barrier</label>
+<select id="barrier">
+<option value="1">Over 1 / Under 2</option>
+<option value="2">Over 2 / Under 3</option>
+<option value="3">Over 3 / Under 4</option>
+<option value="4" selected>Over 4 / Under 5</option>
+<option value="5">Over 5 / Under 6</option>
+<option value="6">Over 6 / Under 7</option>
+<option value="7">Over 7 / Under 8</option>
+<option value="8">Over 8 / Under 9</option>
+</select>
+
+<button onclick="startScanner()">▶ START SCANNER</button>
+<button class="stop" onclick="stopScanner()">■ STOP SCANNER</button>
+</div>
+
+<div class="card">
+<h3>Live Market Statistics</h3>
+<div class="stats">
+<div class="stat">
+<small>Last Digit</small>
+<strong id="lastDigit">--</strong>
+</div>
+<div class="stat">
+<small>Total Ticks</small>
+<strong id="total">0</strong>
+</div>
+<div class="stat">
+<small>Even %</small>
+<strong id="evenPct">0%</strong>
+</div>
+<div class="stat">
+<small>Odd %</small>
+<strong id="oddPct">0%</strong>
+</div>
+<div class="stat">
+<small>Over %</small>
+<strong id="overPct">0%</strong>
+</div>
+<div class="stat">
+<small>Under %</small>
+<strong id="underPct">0%</strong>
+</div>
+</div>
+</div>
+
+<div class="card signal">
+<h3>SCALPING SIGNAL</h3>
+<strong id="signal">WAITING</strong>
+<p id="reason">Waiting for live market data...</p>
+<p>Analysis window: Last 30 ticks</p>
+<p>Monitoring: <strong id="clock">00:00</strong></p>
+</div>
+
+<div class="card">
+<h3>Last Digits History</h3>
+<div id="history" class="history">
+Waiting for ticks...
+</div>
+</div>
+
+<div class="card">
+<h3>Market Information</h3>
+<p>Market: <strong id="marketName">Volatility 10 Index</strong></p>
+<p>Connection: <strong id="connection">Offline</strong></p>
+<p>Last update: <strong id="lastUpdate">--</strong></p>
+</div>
+
+<footer>
+MARKET SCALPER V1.0<br>
+Independent analysis tool | No automatic trading
+</footer>
+
+</div>
+
+<script>
+let socket = null;
+let ticks = [];
+let running = false;
+let seconds = 0;
+let clockTimer = null;
+let reconnectTimer = null;
+
+const APP_ID = 1089;
+
+const marketNames = {
+ R_10:"Volatility 10 Index",
+ R_25:"Volatility 25 Index",
+ R_50:"Volatility 50 Index",
+ R_75:"Volatility 75 Index",
+ R_100:"Volatility 100 Index",
+ "1HZ10V":"Volatility 10 (1s) Index",
+ "1HZ25V":"Volatility 25 (1s) Index",
+ "1HZ50V":"Volatility 50 (1s) Index",
+ "1HZ75V":"Volatility 75 (1s) Index",
+ "1HZ100V":"Volatility 100 (1s) Index"
+};
+
+function setStatus(message,color){
+ document.getElementById("status").textContent="● "+message;
+ document.getElementById("status").style.color=color;
+}
+
+function startScanner(){
+ stopScanner();
+
+ running=true;
+ ticks=[];
+ seconds=0;
+
+ updateDisplay();
+
+ const symbol=document.getElementById("market").value;
+ document.getElementById("marketName").textContent=
+ marketNames[symbol] || symbol;
+
+ setStatus("CONNECTING...", "#ffbf47");
+ document.getElementById("connection").textContent="Connecting";
+
+ connect(symbol);
+
+ clockTimer=setInterval(()=>{
+  if(!running)return;
+  seconds++;
+  const m=String(Math.floor(seconds/60)).padStart(2,"0");
+  const s=String(seconds%60).padStart(2,"0");
+  document.getElementById("clock").textContent=m+":"+s;
+ },1000);
+}
+
+function connect(symbol){
+ if(!running)return;
+
+ socket=new WebSocket(
+  "wss://ws.derivws.com/websockets/v3?app_id="+APP_ID
+ );
+
+ socket.onopen=()=>{
+  if(!running)return;
+  setStatus("CONNECTED - LIVE TICKS","#00e5a0");
+  document.getElementById("connection").textContent="Online";
+
+  socket.send(JSON.stringify({
+   ticks:symbol,
+   subscribe:1
+  }));
+ };
+
+ socket.onmessage=(event)=>{
+  if(!running)return;
+
+  const data=JSON.parse(event.data);
+
+  if(data.error){
+   setStatus("API ERROR","#ff5252");
+   document.getElementById("reason").textContent=
+    data.error.message;
+   return;
+  }
+
+  if(data.msg_type==="tick" && data.tick){
+   processTick(data.tick);
+  }
+ };
+
+ socket.onerror=()=>{
+  setStatus("CONNECTION ERROR","#ff5252");
+ };
+
+ socket.onclose=()=>{
+  document.getElementById("connection").textContent="Offline";
+
+  if(running){
+   setStatus("RECONNECTING...","#ffbf47");
+   reconnectTimer=setTimeout(()=>{
+    if(running)connect(symbol);
+   },3000);
+  }
+ };
+}
+
+function processTick(tick){
+ const precision=Number(tick.pip_size)||2;
+ const quote=Number(tick.quote);
+
+ const formatted=quote.toFixed(precision);
+ const digit=Number(formatted.slice(-1));
+
+ ticks.push(digit);
+
+ if(ticks.length>100){
+  ticks.shift();
+ }
+
+ document.getElementById("lastDigit").textContent=digit;
+ document.getElementById("lastUpdate").textContent=
+ new Date().toLocaleTimeString();
+
+ updateDisplay();
+}
+
+function updateDisplay(){
+ const total=ticks.length;
+
+ document.getElementById("total").textContent=total;
+
+ if(total===0)return;
+
+ const even=ticks.filter(d=>d%2===0).length;
+ const odd=total-even;
+
+ const threshold=Number(
+ document.getElementById("barrier").value
+ );
+
+ const over=ticks.filter(d=>d>threshold).length;
+ const under=total-over;
+
+ const percent=(n)=>Math.round(n/total*100)+"%";
+
+ document.getElementById("evenPct").textContent=percent(even);
+ document.getElementById("oddPct").textContent=percent(odd);
+ document.getElementById("overPct").textContent=percent(over);
+ document.getElementById("underPct").textContent=percent(under);
+
+ const history=document.getElementById("history");
+ history.innerHTML="";
+
+ ticks.slice(-30).reverse().forEach(d=>{
+  const el=document.createElement("div");
+  el.className="digit "+(d%2===0?"even":"odd");
+  el.textContent=d;
+  history.appendChild(el);
+ });
+
+ updateSignal(threshold);
+}
+
+function updateSignal(threshold){
+ const recent=ticks.slice(-30);
+
+ const signal=document.getElementById("signal");
+ const reason=document.getElementById("reason");
+
+ if(recent.length<30){
+  signal.textContent="COLLECTING DATA";
+  reason.textContent=
+  "Need 30 ticks before generating an analysis.";
+  return;
+ }
+
+ const mode=document.getElementById("mode").value;
+
+ let first,second;
+
+ if(mode==="even"){
+  first=recent.filter(d=>d%2===0).length;
+  second=30-first;
+ }else{
+  first=recent.filter(d=>d>threshold).length;
+  second=30-first;
+ }
+
+ const firstName=mode==="even"?"EVEN":"OVER";
+ const secondName=mode==="even"?"ODD":"UNDER";
+
+ const firstPct=Math.round(first/30*100);
+ const secondPct=100-firstPct;
+
+ signal.style.color="#00e5a0";
+
+ if(firstPct>=60){
+  signal.textContent=firstName+" LEAN";
+  reason.textContent=
+  firstName+" appeared "+first+" out of the last 30 ticks ("+
+  firstPct+"%). Historical frequency only.";
+ }else if(secondPct>=60){
+  signal.textContent=secondName+" LEAN";
+  reason.textContent=
+  secondName+" appeared "+second+" out of the last 30 ticks ("+
+  secondPct+"%). Historical frequency only.";
+ }else{
+  signal.textContent="NO CLEAR SIGNAL";
+  reason.textContent=
+  "No side reached the 60% analysis threshold. Wait for more data.";
+  signal.style.color="#ffbf47";
+ }
+}
+
+function stopScanner(){
+ running=false;
+
+ clearInterval(clockTimer);
+ clearTimeout(reconnectTimer);
+
+ if(socket){
+  socket.onclose=null;
+  socket.close();
+  socket=null;
+ }
+
+ setStatus("DISCONNECTED","#ff5252");
+ document.getElementById("connection").textContent="Offline";
+}
+
+document.getElementById("mode").addEventListener("change",updateDisplay);
+document.getElementById("barrier").addEventListener("change",updateDisplay);
+
+</script>
+</body>
+  </html>
+  
